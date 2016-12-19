@@ -1,12 +1,12 @@
 package zx.soft.sent.core.hbase;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -33,7 +33,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import zx.soft.utils.config.ConfigUtil;
+import zx.soft.utils.log.ExceptionHelper;
 
+/**
+ * @author hwdlei
+ *  2016年12月2日
+ */
 public class HBaseUtils {
 	private static Logger logger = LoggerFactory.getLogger(HBaseUtils.class);
 
@@ -44,17 +49,18 @@ public class HBaseUtils {
 		Properties properties = ConfigUtil.getProps("hbase.properties");
 		conf = HBaseConfiguration.create();
 		conf.set("hbase.zookeeper.quorum", properties.getProperty("hbase.zookeeper.quorum"));
+		conf.set("zookeeper.znode.parent", "/hyperbase1");
 		conf.setInt("hbase.zookeeper.property.clientPort",
 				Integer.parseInt(properties.getProperty("hbase.zookeeper.property.clientPort")));
 		try {
 			conn = HConnectionManager.createConnection(conf);
 		} catch (IOException e) {
-			logger.error(e.getMessage());
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 	}
 
-	public static void createTable(String tableName, String[] families) throws MasterNotRunningException,
-	ZooKeeperConnectionException, IOException {
+	public static void createTable(String tableName, String[] families)
+			throws MasterNotRunningException, ZooKeeperConnectionException, IOException {
 		HBaseAdmin admin = new HBaseAdmin(conf);
 		if (admin.tableExists(tableName)) {
 			logger.info("table" + tableName + "already exists!");
@@ -70,7 +76,8 @@ public class HBaseUtils {
 
 	}
 
-	public static boolean addSingleColumn(String tableName, String rowKey, String family, String qualifier, String value) {
+	public static boolean addSingleColumn(String tableName, String rowKey, String family, String qualifier,
+			String value) {
 		try {
 			HTableInterface table = null;
 			try {
@@ -83,7 +90,7 @@ public class HBaseUtils {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 		return false;
 	}
@@ -99,7 +106,7 @@ public class HBaseUtils {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 		return false;
 	}
@@ -109,13 +116,16 @@ public class HBaseUtils {
 			HTableInterface table = null;
 			try {
 				table = conn.getTable(tableName);
+				table.setAutoFlush(false, false);
+				table.setWriteBufferSize(1024 * 1024);
 				table.put(put);
+				table.flushCommits();
 				return true;
 			} finally {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 		return false;
 	}
@@ -133,12 +143,13 @@ public class HBaseUtils {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 		return false;
 	}
 
-	public static boolean incrementColumn(String tableName, String rowKey, String family, String qualifier, long value) {
+	public static boolean incrementColumn(String tableName, String rowKey, String family, String qualifier,
+			long value) {
 		try {
 			HTableInterface table = null;
 			try {
@@ -151,7 +162,7 @@ public class HBaseUtils {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 		return false;
 	}
@@ -169,12 +180,13 @@ public class HBaseUtils {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 		return null;
 	}
 
-	public static boolean scanRows(String tableName, String startRow, String stopRow) {
+	public static List<Result> scanRows(String tableName, String startRow, String stopRow) {
+		List<Result> results  = new ArrayList<>();
 		try {
 			HTableInterface table = null;
 			try {
@@ -182,22 +194,20 @@ public class HBaseUtils {
 				Scan scan = new Scan(Bytes.toBytes(startRow), Bytes.toBytes(stopRow));
 				ResultScanner scanner = table.getScanner(scan);
 				for (Result result : scanner) {
-					for (Cell cell : result.listCells()) {
-						System.out.println(new String(CellUtil.cloneRow(cell)));
-					}
-
+					results.add(result);
 				}
-				return true;
+				return results;
 			} finally {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
-		return false;
+		return results;
 	}
 
-	public static boolean scanByFilter(String tableName, String rowKey, String family, String qualifier, String value) {
+	public static List<Result> scanByFilter(String tableName, String rowKey, String family, String qualifier, String value) {
+		List<Result> results = new ArrayList<>();
 		try {
 			HTableInterface table = null;
 			try {
@@ -207,14 +217,18 @@ public class HBaseUtils {
 				Filter filter = new SingleColumnValueFilter(Bytes.toBytes(family), Bytes.toBytes(qualifier),
 						CompareOp.EQUAL, Bytes.toBytes(value));
 				scan.setFilter(filter);
-				return true;
+				ResultScanner scanner = table.getScanner(scan);
+				for (Result result : scanner) {
+					results.add(result);
+				}
+				return results;
 			} finally {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
-		return false;
+		return results;
 	}
 
 	public static boolean deleteRow(String tableName, String rowKey) {
@@ -229,7 +243,7 @@ public class HBaseUtils {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 		return false;
 	}
@@ -247,7 +261,7 @@ public class HBaseUtils {
 				table.close();
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 		return false;
 	}
@@ -257,7 +271,7 @@ public class HBaseUtils {
 			conn.close();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error(ExceptionHelper.stackTrace(e));
 		}
 	}
 

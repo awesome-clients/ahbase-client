@@ -1,9 +1,7 @@
 package zx.soft.sent.core.hbase;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -13,10 +11,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import zx.soft.utils.log.LogbackUtil;
 
 /**
  * Hbase Dao
+ * 
  * @author donglei
  * @date: 2016年5月16日 下午10:05:01
  */
@@ -25,31 +23,23 @@ public class HbaseDao implements Runnable {
 	private static final Logger logger = LoggerFactory.getLogger(HbaseDao.class);
 
 	private List<Put> puts;
+	
 	private String tableName;
 
 	private AtomicBoolean running = new AtomicBoolean(true);
+	
+	private static final ConcurrentHashMap<String, HbaseDao> hbaseDaoMaps = new ConcurrentHashMap<>();
 
-	private static Map<String, HbaseDao> instances = new ConcurrentHashMap<>();
-
-
-	private HbaseDao(String tableName, String[] families) {
-		try {
-			HBaseUtils.createTable(tableName, families);
-			this.tableName = tableName;
-			this.puts = new ArrayList<Put>();
-			new Thread(this).start();
-		} catch (IOException e) {
-			logger.error(LogbackUtil.expection2Str(e));
-		}
+	private  HbaseDao(String tableName) {
+		this.tableName = tableName;
+		this.puts = new ArrayList<Put>();
+		new Thread(this).start();
 	}
-
-	public static HbaseDao getInstance(String table, String[] familys) {
-		if (!instances.containsKey(table)) {
-			instances.put(table, new HbaseDao(table, familys));
-		}
-		return instances.get(table);
+	
+	public static HbaseDao getInstance(String tableName) {
+		hbaseDaoMaps.putIfAbsent(tableName, new HbaseDao(tableName));
+		return hbaseDaoMaps.get(tableName);
 	}
-
 
 	public void addSingleColumn(String rowKey, String family, String qualifier, String value) {
 		Put put = new Put(Bytes.toBytes(rowKey));
@@ -86,7 +76,7 @@ public class HbaseDao implements Runnable {
 			try {
 				TimeUnit.MINUTES.sleep(1);
 			} catch (InterruptedException e) {
-				e.printStackTrace();
+				logger.error(e.getMessage());
 			}
 			flushPuts();
 		}
