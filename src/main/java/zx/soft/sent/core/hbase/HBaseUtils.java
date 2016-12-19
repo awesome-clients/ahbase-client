@@ -49,7 +49,6 @@ public class HBaseUtils {
 		Properties properties = ConfigUtil.getProps("hbase.properties");
 		conf = HBaseConfiguration.create();
 		conf.set("hbase.zookeeper.quorum", properties.getProperty("hbase.zookeeper.quorum"));
-		conf.set("zookeeper.znode.parent", "/hyperbase1");
 		conf.setInt("hbase.zookeeper.property.clientPort",
 				Integer.parseInt(properties.getProperty("hbase.zookeeper.property.clientPort")));
 		try {
